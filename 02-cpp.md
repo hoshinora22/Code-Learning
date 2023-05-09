@@ -101,7 +101,7 @@ int main() {
 }
 ```
 
-在上面的代码中，我们创建了一个 vector 容器 vec，并向其中插入两个字符串。当我们创建 vec2 时，使用 std::move 将 vec 移动到 vec2 中，避免了拷贝操作。在移动之后，vec 的大小变为 0，而 vec2 的大小为 2。这个例子展示了如何使用容器的移动操作来避免不必要的拷贝操作，提高程序的性能。
+在上面的代码中，我们创建了一个 `vector` 容器 `vec`，并向其中插入两个字符串。当我们创建 `vec2` 时，使用 `std::move` 将 `vec` 移动到 `vec2` 中，避免了拷贝操作。在移动之后，`vec` 的大小变为 0，而 `vec2` 的大小为 2。这个例子展示了如何使用容器的移动操作来避免不必要的拷贝操作，提高程序的性能。
 
 
 
@@ -232,3 +232,59 @@ int main() {
 
 `Args` 是一个特殊的模板参数类型，它通常与其他模板参数类型一起使用，例如 `typename T` 和 `typename... Ts`。在函数模板中，`typename... Ts` 通常用于表示可变参数列表，而 `Args` 则用于将这些参数列表传递给其他函数。在类模板中，`typename... Ts` 通常用于表示可变模板参数列表，而 `Args` 则用于将这些模板参数列表传递给其他类。
 
+
+
+下面是一些使用 `Args` 的示例：
+
+1. 函数模板中的 `Args`
+
+```cpp
+// 接受任意数量的参数，并打印出它们的值
+template<typename... Args>
+void print_values(Args... args) {
+    std::cout << "Values: ";
+    (std::cout << ... << args) << std::endl;
+}
+
+int main() {
+    // 调用 print_values 函数，传递不同类型和数量的参数
+    print_values(1, "hello", 3.14, 'a');
+    return 0;
+}
+```
+
+输出：
+
+```makefile
+Values: 1hello3.14a
+```
+
+
+
+2. 类模板中的 `Args`
+
+```cpp
+// 定义一个通用的类模板，可以接受任意数量和类型的模板参数
+template<typename... Args>
+class my_class {
+public:
+    // 构造函数，接受任意数量和类型的参数
+    my_class(Args... args) {
+        std::cout << "my_class constructor called with " << sizeof...(Args) << " arguments." << std::endl;
+    }
+};
+
+int main() {
+    // 实例化 my_class 类，传递不同数量和类型的模板参数
+    my_class<int, double> c1(1, 3.14);
+    my_class<std::string, char, float> c2("hello", 'a', 3.14f);
+    return 0;
+}
+```
+
+输出：
+
+```makefile
+my_class constructor called with 2 arguments.
+my_class constructor called with 3 arguments.
+```
