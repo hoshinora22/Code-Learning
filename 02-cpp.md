@@ -232,4 +232,23 @@ int main() {
 
 `Args` 是一个特殊的模板参数类型，它通常与其他模板参数类型一起使用，例如 `typename T` 和 `typename... Ts`。在函数模板中，`typename... Ts` 通常用于表示可变参数列表，而 `Args` 则用于将这些参数列表传递给其他函数。在类模板中，`typename... Ts` 通常用于表示可变模板参数列表，而 `Args` 则用于将这些模板参数列表传递给其他类。
 
->>>>>>> parent of 9ca174d (0509-cpp)
+
+
+
+
+## CMake相关
+
+```cmake
+include_directorires(include/XX DIR_SRCS)
+include_directorires(src DIR_SRCS)
+aux_source_directory(src/XX DIR_SRCS)
+```
+
+
+
+```cmake
+# 编译选项，指定文件编码为UTF-8，add_compile_options需要在add_executable之前
+add_compile_options("$<$<C_COMPILER_ID:MSVS>:/utf-8")
+add_compile_options("$<$<CXX_COMPILER_ID:MSVS>:/utf-8")
+```
+
