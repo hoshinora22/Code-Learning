@@ -239,8 +239,8 @@ int main() {
 ## CMake相关
 
 ```cmake
-include_directorires(include/XX DIR_SRCS)
-include_directorires(src DIR_SRCS)
+include_directories(include/XX DIR_SRCS)
+include_directories(src DIR_SRCS)
 aux_source_directory(src/XX DIR_SRCS)
 ```
 
