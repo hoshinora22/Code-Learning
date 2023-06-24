@@ -8,9 +8,9 @@ ref：[人工智能编程 | 谭升的博客 (face2ai.com)](https://face2ai.com/p
 
 
 
-## 1 异构并行计算
 
-### 1.0 并行计算与计算机架构
+
+## 1.0 并行计算与计算机架构
 
 #### 1 并行计算
 
@@ -84,7 +84,7 @@ GPU就属于众核系统。当然现在CPU也都是多核的了，但是他们�
 
 
 
-### 1.1 异构计算与CUDA
+## 1.1 异构计算与CUDA
 
 #### 1 异构计算
 
@@ -238,9 +238,9 @@ CUDA抽象了硬件实现：
 
 
 
-## 2 CUDA编程模型
 
-### 2.0 CUDA编程模型概述（一）
+
+## 2.0 CUDA编程模型概述（一）
 
 #### 1 CUDA编程模型概述
 
@@ -268,20 +268,259 @@ GPU架构下特有几个功能：
 
 #### 2 CUDA编程结构
 
+一个异构环境，通常有多个CPU多个GPU，他们都通过PCIe总线相互通信，也是通过PCIe总线分隔开的。所以我们要区分一下两种设备的内存：
+
+- 主机：CPU及其内存
+- 设备：GPU及其内存
+
+注意这两个内存从硬件到软件都是隔离的（CUDA6.0 以后支持统一寻址）
+
+从host的串行到调用核函数（核函数被调用后控制马上归还主机线程，也就是在第一个并行代码执行时，很有可能第二段host代码已经开始同步执行了）。
 
 
 
+#### 3 内存管理
 
-## 3 CUDA执行模型
+内存管理在传统串行程序是非常常见的：
 
-## 4 内存
+- 寄存器空间，栈空间内的内存由机器自己管理；
+- 堆空间由用户控制分配和释放；
 
-## 5 流与并发
+CUDA程序同样，只是CUDA提供的API可以分配管理设备上的内存，当然也可以用CDUA管理主机上的内存，主机上的传统标准库也能完成主机内存管理。
 
-## 6 指令极原语言
+| 标准C函数 | CUDA C 函数 |   说明   |
+| :-------: | :---------: | :------: |
+|  malloc   | cudaMalloc  | 内存分配 |
+|  memcpy   | cudaMemcpy  | 内存复制 |
+|  memset   | cudaMemset  | 内存设置 |
+|   free    |  cudaFree   | 释放内存 |
 
-## 7 GPU加速库
 
-## 8 多GPU编程
 
-## 9 注意事项
+最关键的一步，这一步要走总线的
+
+```cpp
+cudaError_t cudaMemcpy(void * dst,const void * src,size_t count, cudaMemcpyKind kind)
+```
+
+这个函数是内存拷贝过程，可以完成以下几种过程（cudaMemcpyKind kind）
+
+- cudaMemcpyHostToHost
+- cudaMemcpyHostToDevice
+- cudaMemcpyDeviceToHost
+- cudaMemcpyDeviceToDevice
+
+这四个过程的方向可以清楚的从字面上看出来，这里就不废话了，如果函数执行成功，则会返回 cudaSuccess 否则返回 cudaErrorMemoryAllocation。
+
+使用下面这个指令可以将上面的错误代码翻译成详细信息：
+
+```cpp
+char* cudaGetErrorString(cudaError_t error)
+```
+
+
+
+两个向量的加法：
+
+```cpp
+/*
+* https://github.com/Tony-Tan/CUDA_Freshman
+* 3_sum_arrays
+*/
+#include <cuda_runtime.h>
+#include <stdio.h>
+#include "freshman.h"
+
+
+void sumArrays(float * a,float * b,float * res,const int size)
+{
+  for(int i=0;i<size;i+=4)
+  {
+    res[i]=a[i]+b[i];
+    res[i+1]=a[i+1]+b[i+1];
+    res[i+2]=a[i+2]+b[i+2];
+    res[i+3]=a[i+3]+b[i+3];
+  }
+}
+
+__global__ void sumArraysGPU(float*a,float*b,float*res)
+{
+  int i=threadIdx.x;
+  res[i]=a[i]+b[i];
+}
+int main(int argc,char **argv)
+{
+  int dev = 0;
+  cudaSetDevice(dev);
+
+  int nElem=32;
+  printf("Vector size:%d\n",nElem);
+  int nByte=sizeof(float)*nElem;
+  float *a_h=(float*)malloc(nByte);
+  float *b_h=(float*)malloc(nByte);
+  float *res_h=(float*)malloc(nByte);
+  float *res_from_gpu_h=(float*)malloc(nByte);
+  memset(res_h,0,nByte);
+  memset(res_from_gpu_h,0,nByte);
+
+  float *a_d,*b_d,*res_d;
+  CHECK(cudaMalloc((float**)&a_d,nByte));
+  CHECK(cudaMalloc((float**)&b_d,nByte));
+  CHECK(cudaMalloc((float**)&res_d,nByte));
+
+  initialData(a_h,nElem);
+  initialData(b_h,nElem);
+
+  CHECK(cudaMemcpy(a_d,a_h,nByte,cudaMemcpyHostToDevice));
+  CHECK(cudaMemcpy(b_d,b_h,nByte,cudaMemcpyHostToDevice));
+
+  dim3 block(nElem);
+  dim3 grid(nElem/block.x);
+  sumArraysGPU<<<grid,block>>>(a_d,b_d,res_d);
+  printf("Execution configuration<<<%d,%d>>>\n",block.x,grid.x);
+
+  CHECK(cudaMemcpy(res_from_gpu_h,res_d,nByte,cudaMemcpyDeviceToHost));
+  sumArrays(a_h,b_h,res_h,nElem);
+
+  checkResult(res_h,res_from_gpu_h,nElem);
+  cudaFree(a_d);
+  cudaFree(b_d);
+  cudaFree(res_d);
+
+  free(a_h);
+  free(b_h);
+  free(res_h);
+  free(res_from_gpu_h);
+
+  return 0;
+}
+```
+
+使用nvcc编译程序
+
+解释下内存管理部分的代码：
+
+```cpp
+cudaMalloc((float**)&a_d,nByte);
+```
+
+分配设备端的内存空间，为了区分设备和主机端内存，我们可以给变量加后缀或者前缀h_表示host，d_表示device
+
+> 一个经常会发生的错误就是混用设备和主机的内存地址！！
+
+
+
+## 2.1 CUDA编程模型概述（二）
+
+#### 1 核函数启动
+
+启动核函数，通过的以下的ANSI C扩展出的CUDA C指令：
+
+```cpp
+dim3 block(int);	// 内核中线程的数目
+dim3 grid (int);	// 内核中使用的线程布局
+
+// 使用dim3类型的grid维度和block维度配置内核
+kernel_name <<<grid,block>>> (argument list);	
+
+// 使用int类型的变量，或者常量直接初始化：
+kernel_name<<<4,8>>>(argument list);	
+```
+
+这个三个尖括号’<<<grid,block>>>’内是对设备代码执行的线程结构的配置（或者简称为对内核进行配置，也就是线程结构中的网格块。
+
+我们通过CUDA C内置的数据类型dim3类型的变量来配置grid和block（上文提到过：在设备端访问grid和block属性的数据类型是uint3不能修改的常类型结构，这里反复强调一下）。
+
+我们的核函数是同时复制到多个线程执行的，上文我们说过一个对应问题，多个计算执行在一个数据，肯定是浪费时间，所以为了让多线程按照我们的意愿对应到不同的数据，就要<u>给线程一个唯一的标识</u>，由于设备内存是线性的（基本市面上的内存硬件都是线性形式存储数据的）
+
+可以用threadIdx.x 和blockIdx.x 来组合获得对应的线程的唯一标识
+
+改变核函数的配置，产生运行出结果一样，但效率不同的代码：
+
+```cpp
+// 下列代码如果没有特殊结构在核函数中，执行结果应该一致，但是有些效率会一直比较低。
+kernel_name<<<1,32>>>(argument list);	// 1个快
+kernel_name<<<32,1>>>(argument list);	// 32个快
+```
+
+上面这些是启动部分，当主机启动了核函数，控制权马上回到主机，而不是主机等待设备完成核函数的运行，这一点我们上一篇文章也有提到过（就是等待hello world输出的那段代码后面要加一句）
+
+```cpp
+cudaError_t cudaDeviceSynchronize(void);	// 主机等待设备端执行
+```
+
+
+
+#### 2 编写核函数
+
+|   限定符   |    执行    |                     调用                      |           备注           |
+| :--------: | :--------: | :-------------------------------------------: | :----------------------: |
+| __global__ | 设备端执行 | 可以从主机调用也可以从计算能力3以上的设备调用 | 必须有一个void的返回类型 |
+| __device__ | 设备端执行 |                  设备端调用                   |                          |
+|  __host__  | 主机端执行 |                   主机调用                    |         可以省略         |
+
+而且这里有个特殊的情况就是有些函数可以同时定义为 **device** 和 **host** ，这种函数可以同时被设备和主机端的代码调用，主机端代码调用函数很正常，设备端调用函数与C语言一致，但是要声明成设备端代码，告诉nvcc编译成设备机器码，同时声明主机端设备端函数，那么就要告诉编译器，生成两份不同设备的机器码。
+
+Kernel核函数编写有以下限制
+
+1. 只能访问设备内存
+2. 必须有void返回类型
+3. 不支持可变数量的参数
+4. 不支持静态变量
+5. 显示异步行为
+
+并行程序中经常的一种现象：把串行代码并行化时对串行代码块for的操作，也就是<u>把for并行化</u>。
+
+```cpp
+/// 串行
+void sumArraysOnHost(float *A, float *B, float *C, const int N) 
+{
+  for (int i = 0; i < N; i++)
+  {
+      C[i] = A[i] + B[i];
+  }
+}
+
+/// 并行
+__global__ void sumArraysOnGPU(float *A, float *B, float *C) 
+{
+  int i = threadIdx.x;
+  C[i] = A[i] + B[i];
+}
+```
+
+
+
+#### 3 验证核函数
+
+进行调试时可以把核函数配置成单线程的
+
+```cpp
+kernel_name<<<1,1>>>(argument list)
+```
+
+#### 4 错误处理
+
+```cpp
+#define CHECK(call)\
+{\  
+	const cudaError_t error=call;\  
+	if(error!=cudaSuccess)\  
+	{\      
+		printf("ERROR: %s:%d,",__FILE__,__LINE__);\
+        printf("code:%d,reason:%s\n",error,cudaGetErrorString(error));\      
+		exit(1);\  
+	}\
+}
+```
+
+
+
+## 2.2 给核函数计时
+
+
+
+## 2.3 组织并行线程
+
+
+
